@@ -253,7 +253,7 @@ function ReleaseView({ prs }: { prs: PR[] }) {
         <p className="text-sm text-muted-foreground">Total</p>
         <p className="text-3xl font-bold mt-1">{prs.length}</p>
         <p className="text-sm text-muted-foreground mt-0.5">
-          across {releases.length} releases
+          across {releases.length} {releases.length === 1 ? "release" : "releases"}
         </p>
       </div>
       {releases.map((r) => (
@@ -351,7 +351,7 @@ function UserView({ prs, prevYearPrs, prevYear }: { prs: PR[]; prevYearPrs: PR[]
         <p className="text-sm text-muted-foreground">Total</p>
         <p className="text-3xl font-bold mt-1">{prs.length}</p>
         <p className="text-sm text-muted-foreground mt-0.5">
-          across {users.length} contributors
+          across {users.length} {users.length === 1 ? "contributor" : "contributors"}
         </p>
       </div>
       {users.map((u) => {
