@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build && echo '/*  /index.html  200' > dist/_redirects",
+    "build": "tsc -b && vite build && printf '/api/*  /.netlify/functions/:splat  200\\n/*  /index.html  200\\n' > dist/_redirects",
     "lint": "eslint .",
     "preview": "vite preview"
   },
