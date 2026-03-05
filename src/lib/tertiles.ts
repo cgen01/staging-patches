@@ -118,6 +118,9 @@ export function groupByTertile(prs: PR[], displayYear: number): TertileData[] {
     label: getTertileLabel(key),
     key,
     count: groups[key].length,
-    prs: groups[key],
+    prs: groups[key].sort((a, b) => {
+      if (a.status !== b.status) return a.status === "open" ? -1 : 1;
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    }),
   }));
 }

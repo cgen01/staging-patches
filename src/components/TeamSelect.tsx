@@ -1,6 +1,11 @@
 import { TEAMS, saveTeam } from "@/lib/teams";
+import { clearToken } from "@/lib/api";
 
 export function TeamSelect({ onSelect }: { onSelect: (slug: string) => void }) {
+  function handleLogout() {
+    clearToken();
+    window.location.reload();
+  }
   function handleSelect(slug: string) {
     saveTeam(slug);
     onSelect(slug);
@@ -39,6 +44,12 @@ export function TeamSelect({ onSelect }: { onSelect: (slug: string) => void }) {
             </button>
           ))}
         </div>
+        <button
+          onClick={handleLogout}
+          className="mt-4 w-full text-center text-sm text-muted-foreground hover:text-foreground cursor-pointer"
+        >
+          Logout
+        </button>
       </div>
     </div>
   );

@@ -246,7 +246,13 @@ function UserView({ prs, prevYearPrs, prevYear }: { prs: PR[]; prevYearPrs: PR[]
   }
 
   const users = Object.entries(byUser)
-    .map(([author, userPrs]) => ({ author, prs: userPrs }))
+    .map(([author, userPrs]) => ({
+      author,
+      prs: userPrs.sort((a, b) => {
+        if (a.status !== b.status) return a.status === "open" ? -1 : 1;
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      }),
+    }))
     .sort((a, b) => b.prs.length - a.prs.length);
 
   const pieData = users.map((u) => ({ name: u.author, count: u.prs.length }));
