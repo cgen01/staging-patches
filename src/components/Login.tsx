@@ -24,9 +24,10 @@ export function Login({ onLogin }: { onLogin: () => void }) {
   return (
     <div className="flex min-h-screen items-center justify-center">
       <div className="w-full max-w-sm rounded-xl border border-border bg-card p-6 shadow-sm">
-        <h1 className="mb-6 text-xl font-semibold text-center">
-          Staging Patches
-        </h1>
+        <div className="mb-6 flex flex-col items-center gap-3">
+          <img src="/icon-gradient.svg" alt="" className="h-10 w-10" />
+          <h1 className="text-xl font-semibold">Staging Patches</h1>
+        </div>
         <form onSubmit={handleSubmit} className="space-y-4">
           <input
             type="password"
@@ -42,7 +43,7 @@ export function Login({ onLogin }: { onLogin: () => void }) {
           <button
             type="submit"
             disabled={loading || !password}
-            className="w-full rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
+            className="w-full rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50 cursor-pointer"
           >
             {loading ? "Signing in..." : "Sign In"}
           </button>

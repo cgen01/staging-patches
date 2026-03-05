@@ -7,9 +7,14 @@
   command = "pnpm run dev"
   targetPort = 5173
   framework = "#custom"
+  autoLaunch = false
+
+[functions]
+  directory = "netlify/functions"
 
 [[redirects]]
   from = "/api/*"
   to = "/.netlify/functions/:splat"
   status = 200
+  force = true
 

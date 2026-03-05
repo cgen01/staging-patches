@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { fetchPRs, clearToken } from "@/lib/api";
 import { groupByTertile, accumulateByMonthMultiYear, type PR, type TertileData, type CumulativeRow } from "@/lib/tertiles";
 import { TertileChart, CumulativeAreaChart, UserPieChart } from "./TertileChart";
+import { TEAMS, clearSavedTeam } from "@/lib/teams";
 import { cn } from "@/lib/cn";
 
 type ViewMode = "tertile" | "user" | "cumulative";
@@ -10,76 +11,83 @@ const START_YEAR = 2025;
 const CURRENT_YEAR = new Date().getFullYear();
 const YEARS = Array.from({ length: CURRENT_YEAR - START_YEAR + 1 }, (_, i) => START_YEAR + i);
 
-export function Dashboard() {
+function getTeamLabel(slug: string): string {
+  if (slug === "all") return "🌐 All Teams";
+  const team = TEAMS.find((t) => t.slug === slug);
+  return team ? `${team.emoji} ${team.name} Team` : slug;
+}
+
+export function Dashboard({ team, onChangeTeam }: { team: string; onChangeTeam: () => void }) {
   const [year, setYear] = useState(CURRENT_YEAR);
   const [view, setView] = useState<ViewMode>("tertile");
   const [prs, setPrs] = useState<PR[]>([]);
-  const [cumulativeData, setCumulativeData] = useState<CumulativeRow[]>([]);
-  const [cumulativeYears, setCumulativeYears] = useState<[number, number]>([CURRENT_YEAR - 1, CURRENT_YEAR]);
+  const [prevYearPrs, setPrevYearPrs] = useState<PR[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  const [prevYearT3Count, setPrevYearT3Count] = useState<number | null>(null);
-  const [prevYearTotal, setPrevYearTotal] = useState<number | null>(null);
-  const [prevYearPrs, setPrevYearPrs] = useState<PR[]>([]);
-
-  // Fetch current year + previous year for tertile/user view
+  // Single fetch for both years — all views derive from the same data
   useEffect(() => {
-    if (view !== "tertile" && view !== "user") return;
     setLoading(true);
     setError("");
     const prevYear = year - 1;
     Promise.all([
-      fetchPRs(year).then((data) => data.items as PR[]),
-      fetchPRs(prevYear).then((data) => data.items as PR[]),
+      fetchPRs(year, team).then((data) => data.items as PR[]),
+      fetchPRs(prevYear, team).then((data) => data.items as PR[]),
     ])
       .then(([items, prevItems]) => {
         setPrs(items);
         setPrevYearPrs(prevItems);
-        const grouped = groupByTertile(prevItems, prevYear);
-        setPrevYearT3Count(grouped.find((t) => t.key === "T3")?.count ?? 0);
-        setPrevYearTotal(grouped.reduce((sum, t) => sum + t.count, 0));
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
-  }, [year, view]);
-
-  // Fetch current year + previous year for cumulative view
-  useEffect(() => {
-    if (view !== "cumulative") return;
-    const prevYear = year - 1;
-    setLoading(true);
-    setError("");
-    Promise.all([
-      fetchPRs(prevYear).then((data) => ({ year: prevYear, prs: data.items as PR[] })),
-      fetchPRs(year).then((data) => ({ year, prs: data.items as PR[] })),
-    ])
-      .then((results) => {
-        setCumulativeData(accumulateByMonthMultiYear(results));
-        setCumulativeYears([prevYear, year]);
-      })
-      .catch((err) => setError(err.message))
-      .finally(() => setLoading(false));
-  }, [year, view]);
+  }, [year, team]);
 
   const tertiles = groupByTertile(prs, year);
+  const prevYearGrouped = groupByTertile(prevYearPrs, year - 1);
+  const prevYearT3Count = prevYearGrouped.find((t) => t.key === "T3")?.count ?? 0;
+  const prevYearTotal = prevYearGrouped.reduce((sum, t) => sum + t.count, 0);
+  const cumulativeData = accumulateByMonthMultiYear([
+    { year: year - 1, prs: prevYearPrs },
+    { year, prs },
+  ]);
+  const cumulativeYears: [number, number] = [year - 1, year];
 
   function handleLogout() {
     clearToken();
+    clearSavedTeam();
     window.location.reload();
+  }
+
+  function handleChangeTeam() {
+    clearSavedTeam();
+    onChangeTeam();
   }
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-8">
       {/* Header */}
       <div className="mb-8 flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Staging Patches</h1>
-        <button
-          onClick={handleLogout}
-          className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-secondary"
-        >
-          Logout
-        </button>
+        <div>
+          <div className="flex items-center gap-2">
+            <img src="/icon-gradient.svg" alt="" className="h-7 w-7" />
+            <h1 className="text-2xl font-bold">Staging Patches</h1>
+          </div>
+          <p className="text-sm text-muted-foreground mt-0.5">{getTeamLabel(team)}</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleChangeTeam}
+            className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-secondary cursor-pointer"
+          >
+            Change Team
+          </button>
+          <button
+            onClick={handleLogout}
+            className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-secondary cursor-pointer"
+          >
+            Logout
+          </button>
+        </div>
       </div>
 
       {/* Controls */}
@@ -164,7 +172,7 @@ export function Dashboard() {
                 <p className="text-3xl font-bold mt-1">
                   {tertiles.reduce((sum, t) => sum + t.count, 0)}
                 </p>
-                {prevYearTotal != null && prevYearTotal > 0 && (() => {
+                {prevYearTotal > 0 && (() => {
                   const currTotal = tertiles.reduce((sum, t) => sum + t.count, 0);
                   const change = ((currTotal - prevYearTotal) / prevYearTotal) * 100;
                   return (
@@ -303,7 +311,7 @@ function UserView({ prs, prevYearPrs, prevYear }: { prs: PR[]; prevYearPrs: PR[]
   );
 }
 
-function PRList({ tertiles, prevYearT3Count, prevYear }: { tertiles: TertileData[]; prevYearT3Count: number | null; prevYear: number }) {
+function PRList({ tertiles, prevYearT3Count, prevYear }: { tertiles: TertileData[]; prevYearT3Count: number; prevYear: number }) {
   const [expanded, setExpanded] = useState<string | null>(null);
 
   return (
@@ -312,7 +320,7 @@ function PRList({ tertiles, prevYearT3Count, prevYear }: { tertiles: TertileData
         let change: number | null = null;
         let compLabel = "";
 
-        if (i === 0 && prevYearT3Count != null && prevYearT3Count > 0) {
+        if (i === 0 && prevYearT3Count > 0) {
           change = ((t.count - prevYearT3Count) / prevYearT3Count) * 100;
           compLabel = `${prevYear} T3`;
         } else if (i > 0 && tertiles[i - 1].count > 0) {
