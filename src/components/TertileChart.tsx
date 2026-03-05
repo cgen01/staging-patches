@@ -90,6 +90,36 @@ export function CumulativeAreaChart({
   );
 }
 
+export interface ReleaseSlice {
+  name: string;
+  count: number;
+}
+
+export function ReleaseBarChart({ data }: { data: ReleaseSlice[] }) {
+  return (
+    <ResponsiveContainer width="100%" height={Math.max(320, data.length * 40)}>
+      <BarChart
+        data={data}
+        layout="vertical"
+        margin={{ top: 20, right: 20, bottom: 20, left: 20 }}
+      >
+        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" horizontal={false} />
+        <XAxis type="number" allowDecimals={false} tick={{ fontSize: 13 }} />
+        <YAxis type="category" dataKey="name" tick={{ fontSize: 12 }} width={140} />
+        <Tooltip
+          formatter={(value) => [`${value}`, "PRs"]}
+          contentStyle={{ borderRadius: 8, fontSize: 13 }}
+        />
+        <Bar dataKey="count" radius={[0, 6, 6, 0]} maxBarSize={30}>
+          {data.map((_entry, index) => (
+            <Cell key={index} fill={COLORS[index % COLORS.length]} />
+          ))}
+        </Bar>
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}
+
 export interface UserSlice {
   name: string;
   count: number;

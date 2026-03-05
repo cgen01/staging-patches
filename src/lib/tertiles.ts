@@ -5,6 +5,7 @@ export interface PR {
   html_url: string;
   status: "open" | "merged";
   author: string;
+  base_branch: string;
 }
 
 export interface TertileData {

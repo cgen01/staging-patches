@@ -87,6 +87,48 @@ interface GitHubSearchResponse {
   items: GitHubSearchItem[];
 }
 
+async function fetchBaseBranches(prNumbers: number[], githubToken: string): Promise<Map<number, string>> {
+  const result = new Map<number, string>();
+  if (prNumbers.length === 0) return result;
+
+  // GraphQL allows ~100 nodes per query, batch in chunks
+  const CHUNK_SIZE = 100;
+  for (let i = 0; i < prNumbers.length; i += CHUNK_SIZE) {
+    const chunk = prNumbers.slice(i, i + CHUNK_SIZE);
+    const aliases = chunk.map((n, idx) => `pr${idx}: pullRequest(number: ${n}) { number baseRefName }`).join("\n    ");
+    const query = `{
+  repository(owner: "blinemedical", name: "simcapture-cloud") {
+    ${aliases}
+  }
+}`;
+
+    const res = await fetch("https://api.github.com/graphql", {
+      method: "POST",
+      headers: {
+        Authorization: `bearer ${githubToken}`,
+        "Content-Type": "application/json",
+        "User-Agent": "staging-patches-dashboard",
+      },
+      body: JSON.stringify({ query }),
+    });
+
+    if (!res.ok) continue;
+
+    const json = await res.json();
+    const repo = json.data?.repository;
+    if (!repo) continue;
+
+    for (const key of Object.keys(repo)) {
+      const pr = repo[key];
+      if (pr?.number && pr?.baseRefName) {
+        result.set(pr.number, pr.baseRefName);
+      }
+    }
+  }
+
+  return result;
+}
+
 export default async (req: Request, _context: Context) => {
   if (!verifyToken(req)) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), {
@@ -144,7 +186,7 @@ export default async (req: Request, _context: Context) => {
   // Fetch Feb-Dec of the year + Jan of the next year (for T3 which spans Oct-Jan)
   const baseQuery = `repo:blinemedical/simcapture-cloud is:pr ${authorQuery} base:release- created:${year}-02-01..${year + 1}-01-31`;
 
-  type PRItem = { number: number; title: string; created_at: string; html_url: string; status: "open" | "merged"; author: string };
+  type PRItem = { number: number; title: string; created_at: string; html_url: string; status: "open" | "merged"; author: string; base_branch: string };
 
   async function searchPRs(query: string, status: "open" | "merged"): Promise<PRItem[]> {
     const items: PRItem[] = [];
@@ -173,6 +215,7 @@ export default async (req: Request, _context: Context) => {
           html_url: item.html_url,
           status,
           author: item.user?.login ?? "unknown",
+          base_branch: "",
         }))
       );
       page++;
@@ -188,6 +231,13 @@ export default async (req: Request, _context: Context) => {
       searchPRs(`${baseQuery} is:open`, "open"),
     ]);
     allItems = [...merged, ...open];
+
+    // Batch-fetch base branches via GraphQL
+    const prNumbers = allItems.map((item) => item.number);
+    const baseBranches = await fetchBaseBranches(prNumbers, githubToken);
+    for (const item of allItems) {
+      item.base_branch = baseBranches.get(item.number) ?? "";
+    }
   } catch (err) {
     return new Response(
       JSON.stringify({ error: "GitHub API error", details: String(err) }),

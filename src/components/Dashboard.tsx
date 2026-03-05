@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
 import { fetchPRs, clearToken } from "@/lib/api";
 import { groupByTertile, accumulateByMonthMultiYear, type PR, type TertileData, type CumulativeRow } from "@/lib/tertiles";
-import { TertileChart, CumulativeAreaChart, UserPieChart } from "./TertileChart";
+import { TertileChart, CumulativeAreaChart, UserPieChart, ReleaseBarChart } from "./TertileChart";
 import { TEAMS, clearSavedTeam } from "@/lib/teams";
 import { cn } from "@/lib/cn";
 
-type ViewMode = "tertile" | "user" | "cumulative";
+type ViewMode = "tertile" | "user" | "release" | "cumulative";
 
 const START_YEAR = 2025;
 const CURRENT_YEAR = new Date().getFullYear();
@@ -128,6 +128,17 @@ export function Dashboard({ team, onChangeTeam }: { team: string; onChangeTeam: 
             By User
           </button>
           <button
+            onClick={() => setView("release")}
+            className={cn(
+              "px-3 py-1.5 text-sm cursor-pointer",
+              view === "release"
+                ? "bg-primary text-primary-foreground"
+                : "hover:bg-secondary"
+            )}
+          >
+            By Release
+          </button>
+          <button
             onClick={() => setView("cumulative")}
             className={cn(
               "px-3 py-1.5 text-sm rounded-r-md cursor-pointer",
@@ -156,11 +167,9 @@ export function Dashboard({ team, onChangeTeam }: { team: string; onChangeTeam: 
           {/* Chart */}
           {view !== "user" && (
             <div className="mb-8 rounded-xl border border-border bg-card p-4">
-              {view === "tertile" ? (
-                <TertileChart data={tertiles} />
-              ) : (
-                <CumulativeAreaChart data={cumulativeData} years={cumulativeYears} />
-              )}
+              {view === "tertile" && <TertileChart data={tertiles} />}
+              {view === "release" && <ReleaseBarChart data={groupByRelease(prs)} />}
+              {view === "cumulative" && <CumulativeAreaChart data={cumulativeData} years={cumulativeYears} />}
             </div>
           )}
 
@@ -189,11 +198,87 @@ export function Dashboard({ team, onChangeTeam }: { team: string; onChangeTeam: 
             </>
           )}
           {view === "user" && <UserView prs={prs} prevYearPrs={prevYearPrs} prevYear={year - 1} />}
+          {view === "release" && <ReleaseView prs={prs} />}
           {view === "cumulative" && (
             <CumulativeCards data={cumulativeData} years={cumulativeYears} />
           )}
         </>
       )}
+    </div>
+  );
+}
+
+function groupByRelease(prs: PR[]): { name: string; count: number }[] {
+  const groups: Record<string, number> = {};
+  for (const pr of prs) {
+    const branch = pr.base_branch || "unknown";
+    groups[branch] = (groups[branch] ?? 0) + 1;
+  }
+  return Object.entries(groups)
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => {
+      // Sort release branches by version number descending
+      const va = a.name.replace("release-", "");
+      const vb = b.name.replace("release-", "");
+      return vb.localeCompare(va, undefined, { numeric: true });
+    });
+}
+
+function ReleaseView({ prs }: { prs: PR[] }) {
+  const [expanded, setExpanded] = useState<string | null>(null);
+
+  const byRelease: Record<string, PR[]> = {};
+  for (const pr of prs) {
+    const branch = pr.base_branch || "unknown";
+    (byRelease[branch] ??= []).push(pr);
+  }
+
+  const releases = Object.entries(byRelease)
+    .map(([branch, releasePrs]) => ({
+      branch,
+      prs: releasePrs.sort((a, b) => {
+        if (a.status !== b.status) return a.status === "open" ? -1 : 1;
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      }),
+    }))
+    .sort((a, b) => {
+      const va = a.branch.replace("release-", "");
+      const vb = b.branch.replace("release-", "");
+      return vb.localeCompare(va, undefined, { numeric: true });
+    });
+
+  return (
+    <div className="space-y-4">
+      <div className="mb-4 rounded-xl border border-border bg-card p-5 text-center">
+        <p className="text-sm text-muted-foreground">Total</p>
+        <p className="text-3xl font-bold mt-1">{prs.length}</p>
+        <p className="text-sm text-muted-foreground mt-0.5">
+          across {releases.length} releases
+        </p>
+      </div>
+      {releases.map((r) => (
+        <div key={r.branch}>
+          <button
+            onClick={() => setExpanded(expanded === r.branch ? null : r.branch)}
+            className="w-full text-left rounded-lg border border-border bg-card px-4 py-3 hover:bg-secondary flex justify-between items-center cursor-pointer"
+          >
+            <span className="flex items-center gap-2">
+              <span className="font-mono font-medium text-sm">{r.branch}</span>
+              <span className="text-muted-foreground text-sm">— {r.prs.length} PRs</span>
+            </span>
+            <span className="text-muted-foreground text-sm">
+              {expanded === r.branch ? "Hide" : "Show"}
+            </span>
+          </button>
+          {expanded === r.branch && (
+            <div className="mt-1 divide-y divide-border border border-border rounded-lg overflow-hidden bg-card">
+              {r.prs.map((pr) => (
+                <PRRow key={pr.number} pr={pr} />
+              ))}
+            </div>
+          )}
+        </div>
+      ))}
     </div>
   );
 }
@@ -433,6 +518,11 @@ function PRRow({ pr }: { pr: PR }) {
         </div>
         <p className="text-xs text-muted-foreground mt-0.5">
           #{pr.number} opened {timeAgo(pr.created_at)} by {pr.author}
+          {pr.base_branch && (
+            <span className="ml-1">
+              → <span className="font-mono bg-secondary rounded px-1 py-0.5">{pr.base_branch}</span>
+            </span>
+          )}
         </p>
       </div>
     </div>
